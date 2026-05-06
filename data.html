@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AquaFeed Control v2</title>
+    <style>
+        :root {
+            --bg: #0f172a;
+            --card: #1e293b;
+            --accent: #38bdf8;
+            --green: #4ade80;
+            --red: #fb7185;
+            --text: #f1f5f9;
+            --muted: #94a3b8;
+        }
+
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .container { width: 100%; max-width: 480px; }
+
+        .card {
+            background: var(--card);
+            border-radius: 24px;
+            padding: 24px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+
+        h2 { font-size: 1.1rem; margin-top: 0; color: var(--accent); display: flex; align-items: center; gap: 10px; }
+
+        label { display: block; font-size: 0.85rem; color: var(--muted); margin-bottom: 8px; }
+
+        /* Eingabefelder */
+        input[type="time"], input[type="number"] {
+            width: 100%;
+            background: #0f172a;
+            border: 2px solid #334155;
+            border-radius: 12px;
+            padding: 12px;
+            color: white;
+            font-size: 1rem;
+            box-sizing: border-box;
+        }
+
+        .time-row { display: flex; gap: 10px; margin-bottom: 12px; }
+
+        /* Schieberegler */
+        .slider {
+            width: 100%;
+            -webkit-appearance: none;
+            height: 8px;
+            border-radius: 5px;
+            background: #334155;
+            margin: 15px 0;
+        }
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 20px;
+            height: 20px;
+            background: var(--accent);
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 0 10px var(--accent);
+        }
+
+        /* Buttons */
+        .btn {
+            border: none;
+            border-radius: 14px;
+            padding: 14px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            font-size: 0.9rem;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        .btn-primary { background: var(--accent); color: #000; width: 100%; }
+        .btn-hold { background: #334155; color: white; border: 1px solid #475569; }
+        .btn-hold:active { background: var(--accent); color: #000; transform: scale(0.96); }
+        .btn-delete { background: #312e81; color: var(--red); padding: 10px; }
+
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+        /* Hardware Monitor */
+        .monitor {
+            background: #000;
+            border-radius: 16px;
+            padding: 15px;
+            font-family: 'monospace';
+            font-size: 0.8rem;
+            border: 1px solid #1e293b;
+        }
+        .stat { display: flex; justify-content: space-between; margin-bottom: 5px; color: var(--green); }
+        .stat span:first-child { color: var(--muted); }
+
+        .save-bar {
+            position: sticky;
+            bottom: 20px;
+            width: 100%;
+            max-width: 480px;
+            z-index: 100;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div style="text-align: center; margin-bottom: 20px;">
+        <h1 style="margin:0; font-size: 1.5rem; letter-spacing: 2px;">AQUA<span style="color:var(--accent)">FEED</span></h1>
+        <span style="font-size: 0.7rem; color: var(--muted); text-transform: uppercase;">Liquid Food System</span>
+    </div>
+
+    <!-- ZEITEN -->
+    <div class="card">
+        <h2>⏰ Fütterungszeiten</h2>
+        <div id="time-list"></div>
+        <button class="btn btn-hold" style="width:100%; margin-top:10px;" onclick="addTime()">+ Zeit hinzufügen</button>
+    </div>
+
+    <!-- KONFIGURATION -->
+    <div class="card">
+        <h2>🥣 Futter-Dosis</h2>
+        <label>Dauer der Portion (Sekunden)</label>
+        <input type="number" id="feed_val" value="5">
+    </div>
+
+    <!-- HARDWARE KALIBRIERUNG -->
+    <div class="card">
+        <h2>🔧 Manuelle Kalibrierung</h2>
+        
+        <label>Pumpe (Gedrückthalten)</label>
+        <div class="grid-2">
+            <button class="btn btn-hold" onmousedown="manual('pump_fwd')" onmouseup="manual('pump_stop')" ontouchstart="manual('pump_fwd')" ontouchend="manual('pump_stop')">Vorlauf</button>
+            <button class="btn btn-hold" onmousedown="manual('pump_rev')" onmouseup="manual('pump_stop')" ontouchstart="manual('pump_rev')" ontouchend="manual('pump_stop')">Rücklauf</button>
+        </div>
+
+        <div style="margin-top: 25px; border-top: 1px solid #334155; padding-top: 20px;">
+            <label>Mixer Speed: <span id="pwm_disp" style="color:var(--accent)">50</span>%</label>
+            <input type="range" id="mixer_speed" class="slider" min="0" max="100" value="50" oninput="document.getElementById('pwm_disp').innerText=this.value">
+            
+            <button class="btn btn-hold" style="width:100%" 
+                onmousedown="mixerOn()" onmouseup="mixerOff()" 
+                ontouchstart="mixerOn()" ontouchend="mixerOff()">
+                🌀 Mixer halten zum Testen
+            </button>
+        </div>
+
+        <div class="grid-2" style="margin-top:20px;">
+            <div>
+                <label>Füllzeit (s)</label>
+                <input type="number" id="fill_val" value="10">
+            </div>
+            <div>
+                <label>Rücklauf (s)</label>
+                <input type="number" id="rev_val" value="12">
+            </div>
+        </div>
+    </div>
+
+    <!-- SPEICHERN BUTTON -->
+    <div class="save-bar">
+        <button class="btn btn-primary" onclick="saveSettings()" style="box-shadow: 0 0 20px rgba(56, 189, 248, 0.4);">💾 KONFIGURATION SPEICHERN</button>
+    </div>
+
+    <!-- MONITOR -->
+    <div class="card">
+        <h2>🖥️ Hardware Monitor</h2>
+        <div class="monitor" id="hw-monitor">
+            System wird abgefragt...
+        </div>
+    </div>
+</div>
+
+<script>
+    let times = ["08:00", "20:00"];
+
+    function manual(action, val=0) {
+        fetch(`/manual?action=${action}&val=${val}`);
+    }
+
+    function mixerOn() {
+        const speed = document.getElementById('mixer_speed').value;
+        manual('mixer_on', speed);
+    }
+
+    function mixerOff() {
+        manual('mixer_off');
+    }
+
+    function addTime() {
+        times.push("12:00");
+        render();
+    }
+
+    function render() {
+        const container = document.getElementById('time-list');
+        container.innerHTML = times.map((t, i) => `
+            <div class="time-row">
+                <input type="time" value="${t}" onchange="times[${i}]=this.value">
+                <button class="btn btn-delete" onclick="times.splice(${i},1);render()">✕</button>
+            </div>
+        `).join('');
+    }
+
+    function saveSettings() {
+        const data = {
+            times: times,
+            fill: document.getElementById('fill_val').value,
+            rev: document.getElementById('rev_val').value,
+            feed: document.getElementById('feed_val').value,
+            speed: document.getElementById('mixer_speed').value
+        };
+        console.log("Saving...", data);
+        alert("Daten gespeichert!");
+    }
+
+    function updateMonitor() {
+        fetch('/status').then(r => r.json()).then(data => {
+            document.getElementById('hw-monitor').innerHTML = `
+                <div class="stat"><span>IP</span> <span>${data.ip}</span></div>
+                <div class="stat"><span>SIGNAL</span> <span>${data.rssi} dBm</span></div>
+                <div class="stat"><span>UPTIME</span> <span>${data.uptime} Min</span></div>
+                <div class="stat"><span>MEM</span> <span>${Math.round(data.heap/1024)} KB free</span></div>
+            `;
+        }).catch(e => {});
+    }
+
+    setInterval(updateMonitor, 5000);
+    render();
+    updateMonitor();
+</script>
+
+</body>
+</html>
